@@ -23,7 +23,7 @@ use Galdino\Proxy\Server\Contracts\RequestInterceptorContract;
 use Galdino\Proxy\Server\ProxyMiddleware;
 use Galdino\Proxy\Server\ProxyServer;
 
-class IntimaaiProxyServer extends ProxyMiddleware implements RequestInterceptorContract
+class MyProxyServer extends ProxyMiddleware implements RequestInterceptorContract
 {
     protected $proxy;
     
