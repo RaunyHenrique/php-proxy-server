@@ -6,8 +6,8 @@ use Galdino\Proxy\Server\Request;
 use Galdino\Proxy\Server\Response;
 use React\Promise\Promise;
 
-interface RequestInterceptorContract {
-
+interface RequestInterceptorContract
+{
     /**
      * Called when the server receive a new request
      * @param Request $request The request object. You can manipulate it
@@ -21,6 +21,14 @@ interface RequestInterceptorContract {
      * @return Promise
      */
     public function beforeProxyRequest(Request $request) : Promise;
+
+    /**
+     * Called before retry the server's proxy request
+     * @param Request $request
+     * @param Response $response
+     * @return Promise
+     */
+    public function beforeRetryProxyRequest(Request $request, Response $response) : Promise;
 
     /**
      * Called after server request and before the server respond to the client.

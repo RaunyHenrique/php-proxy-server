@@ -9,9 +9,8 @@ use Psr\Http\Message\ServerRequestInterface;
 use React\EventLoop\Factory;
 use React\EventLoop\TimerInterface;
 use React\Http\Middleware\LimitConcurrentRequestsMiddleware;
-use React\Http\Response;
-use React\Http\Server;
-use React\Http\StreamingServer;
+use React\Http\Middleware\StreamingRequestMiddleware;
+use React\Http\Message\Response;
 use React\Promise\Promise;
 use React\Socket\ConnectionInterface;
 use React\Socket\Connector;
@@ -95,7 +94,7 @@ class ProxyServer
         return false;
     }
 
-    private function prepareRequest(ServerRequestInterface $serverRequest, $rawBody = null) : Request
+    private function prepareRequest(ServerRequestInterface $serverRequest, $rawBody = null, $requestDateStartTime = null) : Request
     {
         $request = new Request();
 
@@ -106,7 +105,8 @@ class ProxyServer
             ->setQuery($serverRequest->getQueryParams())
             ->setProxy($this->proxy)
             ->setDebug($this->debugRequests)
-            ->setBody($rawBody);
+            ->setBody($rawBody)
+            ->setRequestDateStartTime($requestDateStartTime);
 
 //        if($request->isMultipartForm()) {
 //            foreach ($serverRequest->getUploadedFiles() ?? [] as $key => $file) {
@@ -179,7 +179,7 @@ class ProxyServer
                                 }
 
                                 $newRequest
-                                    ->getResponse($this->getLoop())
+                                    ->getResponse($this->getLoop(), $this->interceptor)
                                     ->then(function (\Galdino\Proxy\Server\Response $response) use($newRequest, $callBeforeClientResponse, $resolve, $reject) {
                                         $callBeforeClientResponse($newRequest, $response, function ($request, $response) use($resolve, $reject) {
                                             $resolve(
@@ -187,7 +187,21 @@ class ProxyServer
                                             );
                                         });
                                     })
-                                    ->otherwise($reject);
+                                    ->otherwise(function ($result) use($newRequest, $callBeforeClientResponse, $resolve, $reject) {
+
+                                        $callBeforeClientResponse($newRequest, $result[1], function ($request, $response) use($resolve, $reject, $result) {
+
+                                            $this
+                                                ->interceptor
+                                                ->onError($result[0], $request, $response)
+                                                ->then(function () use ($request, $response, $resolve) {
+                                                    $resolve(
+                                                        $this->prepareNativeResponse($response)
+                                                    );
+                                                })
+                                                ->otherwise($reject);
+                                        });
+                                    });
                             })->otherwise($reject);
                     })->otherwise($reject);
             } catch (\Exception $exception) {
@@ -200,13 +214,14 @@ class ProxyServer
     {
         return new Promise(function ($resolve, $reject) use ($request) {
             $rawBody = null;
+            $requestDateStartTime = date('Y-m-d H:i:s');
 
             $request->getBody()->on('data', function ($data) use (&$rawBody) {
                 $rawBody .= $data;
             });
 
-            $request->getBody()->on('end', function () use ($resolve, $reject, $request, &$rawBody){
-                $request = $this->prepareRequest($request, $rawBody);
+            $request->getBody()->on('end', function () use ($resolve, $reject, $request, &$rawBody, $requestDateStartTime){
+                $request = $this->prepareRequest($request, $rawBody, $requestDateStartTime);
 
                 $this
                     ->proxyRequest($request)
@@ -240,10 +255,14 @@ class ProxyServer
             'tls' => array(
                 'verify_peer' => false,
                 'verify_peer_name' => false
-            )
+            ),
+            'happy_eyeballs' => false,
+            'timeout' => 600.0
         ]);
 
-        $server = new StreamingServer([
+        $server = new \React\Http\Server(
+            $this->getLoop(),
+            new StreamingRequestMiddleware(),
             new LimitConcurrentRequestsMiddleware($this->concurrentRequestsLimit),
             function (ServerRequestInterface $request) use ($connector) {
                 if ($request->getMethod() !== 'CONNECT') {
@@ -269,9 +288,14 @@ class ProxyServer
                     }
                 );
             }
-        ]);
+        );
 
-        $socket = new \React\Socket\Server('0.0.0.0:8001', $this->getLoop());
+        $socket = new \React\Socket\Server('0.0.0.0:8001', $this->getLoop(), [
+            'tls' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false
+            )
+        ]);
 
         $server->listen($socket);
 
@@ -296,14 +320,21 @@ class ProxyServer
 
     protected function startTlsHelloServer()
     {
-        $server = new StreamingServer([
+        $server = new \React\Http\Server(
+            $this->getLoop(),
+            new StreamingRequestMiddleware(),
             new LimitConcurrentRequestsMiddleware($this->concurrentRequestsLimit),
             function (ServerRequestInterface $request) {
                 return $this->getResponse($request);
             }
-        ]);
+        );
 
-        $socket = new \React\Socket\Server('0.0.0.0:8002', $this->getLoop());
+        $socket = new \React\Socket\Server('0.0.0.0:8002', $this->getLoop(), [
+            'tls' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false
+            )
+        ]);
         $socket = new \React\Socket\SecureServer($socket, $this->getLoop(), [
             'local_cert' => realpath(
                 __DIR__ . DIRECTORY_SEPARATOR .

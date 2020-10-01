@@ -2,7 +2,8 @@
 
 namespace Galdino\Proxy\Server\Traits;
 
-trait ManipulateCookies {
+trait ManipulateCookies
+{
     use ManipulateHeaders;
 
     public function addCookie($name, $value)
@@ -94,7 +95,9 @@ trait ManipulateCookies {
         $this->unsetCookiesHeaders();
 
         foreach ($cookies as $key => $value) {
-            $this->addCookie($key, $value);
+            if (!empty($key)) {
+                $this->addCookie($key, $value);
+            }
         }
 
         return $this;
