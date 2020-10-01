@@ -1,5 +1,5 @@
 {
-    "name": "raunyHenrique/php-proxy-server",
+    "name": "rauny-henrique/php-proxy-server",
     "description": "Servidor de proxy com suporte a HTTP(S) implementado em PHP",
     "keywords": [
         "php",
