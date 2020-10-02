@@ -23,6 +23,7 @@
         }
     ],
     "require": {
+        "php": ">=7.0",
         "react/event-loop": "^1.1.1",
         "react/http": "^1.1",
         "guzzlehttp/guzzle": "~6.0",

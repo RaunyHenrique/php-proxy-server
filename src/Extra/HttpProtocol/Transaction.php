@@ -33,7 +33,7 @@ class Transaction extends \React\Http\Io\Transaction
 
     private $streaming = false;
 
-    private $maximumSize = 256777216; // 256 MiB
+    private $maximumSize = 16777216; // 16 MiB = 2^24 bytes
 
     public function __construct(Sender $sender, LoopInterface $loop)
     {
